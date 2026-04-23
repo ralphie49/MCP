@@ -1,0 +1,18 @@
+{
+  "name": "agent-registry-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+  "test": "cross-env AGENTS_DIR=./Agents tsx src/test-servers.ts",
+  "test:skip-invoke": "cross-env AGENTS_DIR=./Agents tsx src/test-servers.ts --skip-invoke",
+  "start": "cross-env AGENTS_DIR=./Agents tsx src/server.ts"
+},
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
