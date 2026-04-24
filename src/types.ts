@@ -32,7 +32,6 @@ export interface Agent {
   ciSystems:      string[];
   environments:   string[];
   generatedAt:    string;
-  // Raw agent.md content — used by executor to build the system prompt
   rawContent:     string;
 }
 
@@ -67,6 +66,17 @@ export interface ConversationMessage {
   content: string;
 }
 
+/** Result from running code in the Judge0 sandbox */
+export interface CodeExecutionResult {
+  stdout:      string;
+  stderr:      string;
+  compile_err: string;
+  status:      string;   // e.g. "Accepted", "Runtime Error", "Compilation Error"
+  time:        string;   // seconds
+  memory:      string;   // KB
+  language:    string;   // e.g. "python", "java"
+}
+
 export interface InvokeAgentInput {
   /** Agent folder ID — same as used in get_agent */
   agent_id:    string;
@@ -81,18 +91,33 @@ export interface InvokeAgentInput {
    * Override the execution mode defined in agent.md.
    * "analysis"  → recommendations only
    * "generation"→ generate artifacts
-   * "full"      → analyse then generate  (default)
+   * "full"      → analyse then generate (default)
    */
-  mode?:       "analysis" | "generation" | "full";
+  mode?: "analysis" | "generation" | "full";
+  /**
+   * If true, any code block in the agent's response will be automatically
+   * executed in the Judge0 sandbox. Errors are fed back to the agent
+   * so it can self-correct (up to max_retries times).
+   * Default: false
+   */
+  execute_code?: boolean;
+  /**
+   * How many times the agent may attempt to fix its own code after errors.
+   * Only used when execute_code is true.
+   * Default: 2
+   */
+  max_retries?: number;
 }
 
 export interface InvokeAgentResult {
-  agent_id:     string;
-  agent_name:   string;
-  mode:         string;
-  response:     string;
+  agent_id:          string;
+  agent_name:        string;
+  mode:              string;
+  response:          string;
+  /** Present only when execute_code was true and code was found in the response */
+  execution_result?: CodeExecutionResult;
   /** Full conversation so far — pass back as `conversation` for the next turn */
-  conversation: ConversationMessage[];
+  conversation:      ConversationMessage[];
   usage?: {
     input_tokens:  number;
     output_tokens: number;

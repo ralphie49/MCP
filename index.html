@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Agent Registry</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #F7F5F0;
+    --surface:   #FFFFFF;
+    --ink:       #1A1814;
+    --ink2:      #6B6760;
+    --ink3:      #A8A49F;
+    --accent:    #2D5BE3;
+    --accent2:   #E8F0FE;
+    --green:     #1A7A4A;
+    --green-bg:  #E8F5EE;
+    --amber:     #B45309;
+    --amber-bg:  #FEF3C7;
+    --red:       #DC2626;
+    --red-bg:    #FEE2E2;
+    --border:    #E8E5DF;
+    --radius:    12px;
+    --shadow:    0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    --code-bg:   #F3F2EE;
+  }
+
+  [data-theme="dark"] {
+    --bg:        #0F0F10;
+    --surface:   #1A1A1E;
+    --ink:       #EEECEA;
+    --ink2:      #9B9894;
+    --ink3:      #5C5A57;
+    --accent:    #5B8EF4;
+    --accent2:   #1A2540;
+    --green:     #34C97A;
+    --green-bg:  #0D2A1C;
+    --amber:     #F59E0B;
+    --amber-bg:  #2A1F07;
+    --red:       #F87171;
+    --red-bg:    #2A0F0F;
+    --border:    #2A2A2E;
+    --shadow:    0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
+    --code-bg:   #242428;
+  }
+
+  .theme-toggle {
+    position: fixed; top: 16px; right: 20px; z-index: 200;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 12px; cursor: pointer;
+    font-size: 13px; color: var(--ink2); font-family: 'DM Sans', sans-serif;
+    display: flex; align-items: center; gap: 6px;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--ink3); }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg); color: var(--ink);
+    min-height: 100vh; font-size: 15px; line-height: 1.6;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  .shell { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px; flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 28px 0; position: fixed; top: 0; left: 0; bottom: 0;
+    display: flex; flex-direction: column;
+  }
+  .logo { padding: 0 24px 28px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .logo-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--ink); letter-spacing: -0.3px; }
+  .logo-sub { font-size: 11px; color: var(--ink3); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+  .nav { padding: 0 12px; flex: 1; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px; cursor: pointer;
+    color: var(--ink2); font-size: 14px; font-weight: 400;
+    transition: all 0.15s; margin-bottom: 2px;
+    border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--bg); color: var(--ink); }
+  .nav-item.active { background: var(--accent2); color: var(--accent); font-weight: 500; }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .sidebar-footer { padding: 16px 24px 0; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink3); }
+  .status-dot {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--green); margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Main ── */
+  .main { margin-left: 220px; flex: 1; padding: 40px 48px; max-width: 1000px; }
+
+  /* ── Page header ── */
+  .page-header { margin-bottom: 32px; }
+  .page-title { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); letter-spacing: -0.5px; }
+  .page-sub { color: var(--ink2); font-size: 14px; margin-top: 4px; }
+
+  /* ── Cards ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+
+  /* ── Stats row ── */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; }
+  .stat-num { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); }
+  .stat-label { font-size: 12px; color: var(--ink3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Search bar ── */
+  .search-row { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
+  .search-wrap { position: relative; flex: 1; }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ink3); font-size: 15px; }
+  .search-input {
+    width: 100%; padding: 10px 14px 10px 40px;
+    border: 1px solid var(--border); border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px;
+    background: var(--surface); color: var(--ink);
+    outline: none; transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--ink3); }
+
+  select {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px;
+    background: var(--surface); color: var(--ink);
+    outline: none; cursor: pointer;
+  }
+
+  /* ── Agent table ── */
+  .table-wrap { overflow: hidden; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg); }
+  th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 500; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.6px; border-bottom: 1px solid var(--border); }
+  td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); cursor: pointer; }
+  tr { transition: background 0.1s; }
+  .agent-name { font-weight: 500; color: var(--ink); }
+  .agent-spec { font-size: 12px; color: var(--ink2); margin-top: 2px; }
+
+  /* ── Badges ── */
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-green  { background: var(--green-bg);  color: var(--green); }
+  .badge-amber  { background: var(--amber-bg);  color: var(--amber); }
+  .badge-red    { background: var(--red-bg);    color: var(--red); }
+  .badge-blue   { background: var(--accent2);   color: var(--accent); }
+  .badge-gray   { background: var(--bg);        color: var(--ink2); border: 1px solid var(--border); }
+
+  /* ── Score bar ── */
+  .score-wrap { display: flex; align-items: center; gap: 10px; }
+  .score-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .score-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+  .score-num { font-size: 13px; font-weight: 500; color: var(--ink); min-width: 26px; text-align: right; }
+
+  /* ── Run panel ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-weight: 500; color: var(--ink2); text-transform: uppercase; letter-spacing: 0.5px; }
+  input[type="text"], textarea {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px;
+    background: var(--surface); color: var(--ink);
+    outline: none; transition: border-color 0.15s; resize: vertical;
+  }
+  input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+
+  .toggle-row { display: flex; align-items: center; gap: 10px; }
+  .toggle {
+    position: relative; width: 36px; height: 20px;
+    background: var(--border); border-radius: 10px;
+    cursor: pointer; transition: background 0.2s;
+    border: none; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: white; transition: transform 0.2s;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+  .toggle-label { font-size: 13px; color: var(--ink2); }
+
+  .btn-primary {
+    background: var(--accent); color: white; border: none;
+    padding: 11px 24px; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s, transform 0.1s; margin-top: 8px;
+  }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--bg); color: var(--ink2);
+    border: 1px solid var(--border);
+    padding: 8px 16px; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 400;
+    cursor: pointer; transition: all 0.15s; margin-top: 8px;
+  }
+  .btn-secondary:hover { border-color: var(--ink3); color: var(--ink); }
+
+  /* ── Response box ── */
+  .response-box {
+    margin-top: 20px; border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    animation: fadeUp 0.3s ease;
+  }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  .response-header {
+    background: var(--bg); padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--ink2);
+  }
+  .response-header strong { color: var(--ink); font-weight: 500; }
+
+  /* ── Markdown rendered output ── */
+  .response-body {
+    padding: 24px 28px;
+    font-size: 14px; line-height: 1.8; color: var(--ink);
+    max-height: 560px; overflow-y: auto;
+    background: var(--surface);
+  }
+  /* Headings inside rendered markdown */
+  .response-body h1 { font-family: 'DM Serif Display', serif; font-size: 22px; margin: 20px 0 10px; color: var(--ink); }
+  .response-body h2 { font-family: 'DM Serif Display', serif; font-size: 18px; margin: 18px 0 8px; color: var(--ink); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .response-body h3 { font-size: 15px; font-weight: 500; margin: 14px 0 6px; color: var(--ink); }
+  .response-body h4 { font-size: 14px; font-weight: 500; margin: 12px 0 4px; color: var(--ink2); }
+  /* Paragraphs */
+  .response-body p { margin: 0 0 12px; }
+  .response-body p:last-child { margin-bottom: 0; }
+  /* Bold / italic */
+  .response-body strong { font-weight: 500; color: var(--ink); }
+  .response-body em { font-style: italic; }
+  /* Lists */
+  .response-body ul, .response-body ol { margin: 8px 0 12px 20px; }
+  .response-body li { margin-bottom: 4px; }
+  .response-body li > ul, .response-body li > ol { margin: 4px 0 4px 16px; }
+  /* Inline code */
+  .response-body code {
+    background: var(--code-bg); border-radius: 4px;
+    padding: 1px 6px; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12.5px; color: var(--ink);
+  }
+  /* Code blocks */
+  .response-body pre {
+    background: var(--code-bg); border-radius: 8px;
+    padding: 16px 18px; margin: 12px 0; overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  .response-body pre code {
+    background: none; padding: 0; font-size: 12.5px;
+    line-height: 1.6; color: var(--ink);
+  }
+  .response-body pre .lang-label {
+    display: block; font-size: 10px; font-weight: 500; color: var(--ink3);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+  }
+  /* Horizontal rule */
+  .response-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  /* Blockquote */
+  .response-body blockquote {
+    border-left: 3px solid var(--accent); margin: 12px 0;
+    padding: 8px 16px; background: var(--accent2); border-radius: 0 6px 6px 0;
+    color: var(--ink2);
+  }
+  /* Tables */
+  .response-body table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+  .response-body table th { background: var(--bg); padding: 8px 12px; text-align: left; font-weight: 500; border: 1px solid var(--border); }
+  .response-body table td { padding: 7px 12px; border: 1px solid var(--border); }
+  .response-body table tr:nth-child(even) td { background: var(--bg); }
+
+  /* ── Execution result block ── */
+  .exec-result {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    background: var(--green-bg);
+    font-size: 13px;
+  }
+  .exec-result.error { background: var(--red-bg); }
+  .exec-result pre {
+    margin-top: 8px; font-size: 12px;
+    background: rgba(0,0,0,0.06); padding: 10px;
+    border-radius: 6px; overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    white-space: pre-wrap;
+  }
+  .exec-result pre.err { color: var(--red); background: rgba(220,38,38,0.06); }
+
+  /* ── Conversation history ── */
+  .conv-history { margin-top: 28px; }
+  .conv-title {
+    font-size: 11px; font-weight: 500; color: var(--ink3);
+    text-transform: uppercase; letter-spacing: 0.6px;
+    margin-bottom: 12px;
+  }
+  .conv-turn {
+    display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-start;
+  }
+  .conv-turn.user { flex-direction: row-reverse; }
+  .conv-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent2); color: var(--accent);
+    font-size: 11px; font-weight: 500; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .conv-turn.user .conv-avatar { background: var(--bg); color: var(--ink2); }
+  .conv-bubble {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px;
+    font-size: 13.5px; line-height: 1.65; max-width: 85%;
+  }
+  .conv-turn.user .conv-bubble { background: var(--accent2); border-color: transparent; color: var(--ink); }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty / Loading ── */
+  .empty { padding: 48px; text-align: center; color: var(--ink3); font-size: 14px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tab {
+    padding: 8px 16px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; border: none; background: none;
+    color: var(--ink2); font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .tab:hover { background: var(--border); color: var(--ink); }
+  .tab.active { background: var(--ink); color: white; }
+
+  /* ── Modal ── */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35); z-index: 100;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 16px;
+    width: 100%; max-width: 560px; max-height: 80vh;
+    overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    animation: scaleIn 0.2s ease;
+  }
+  @keyframes scaleIn { from { opacity:0; transform: scale(0.95); } to { opacity:1; transform: scale(1); } }
+  .modal-header {
+    padding: 24px 24px 16px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; }
+  .modal-close {
+    background: var(--bg); border: none; border-radius: 6px;
+    width: 28px; height: 28px; cursor: pointer; font-size: 16px;
+    color: var(--ink2); display: flex; align-items: center; justify-content: center;
+  }
+  .modal-body { padding: 20px 24px; }
+  .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-key { color: var(--ink2); }
+  .detail-val { font-weight: 500; text-align: right; max-width: 60%; }
+  .tech-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { background: var(--bg); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; font-size: 12px; color: var(--ink2); }
+
+  /* ── Pages ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Agent info banner (shown in run page when agent is selected) ── */
+  .agent-banner {
+    background: var(--accent2); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+    font-size: 13px; color: var(--accent); display: none;
+    align-items: center; justify-content: space-between;
+  }
+  .agent-banner.visible { display: flex; }
+  .agent-banner strong { color: var(--accent); }
+
+  /* ── Conversation controls ── */
+  .conv-controls {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .conv-indicator {
+    font-size: 12px; color: var(--ink3); flex: 1;
+  }
+  .conv-indicator strong { color: var(--ink2); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">
+  <span id="theme-icon">🌙</span> <span id="theme-label">Dark</span>
+</button>
+
+<div class="shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">Agent Registry</div>
+      <div class="logo-sub">MCP Server</div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" onclick="showPage('catalog', event)">
+        <span class="nav-icon">◈</span> Catalog
+      </button>
+      <button class="nav-item" onclick="showPage('run', event)">
+        <span class="nav-icon">▷</span> Run Agent
+      </button>
+      <button class="nav-item" onclick="showPage('stats', event)">
+        <span class="nav-icon">◉</span> Stats
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="status-dot"></span><span id="status-text">Connecting...</span>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── CATALOG PAGE ── -->
+    <div class="page active" id="page-catalog">
+      <div class="page-header">
+        <div class="page-title">Agent Catalog</div>
+        <div class="page-sub">Browse and discover available agents</div>
+      </div>
+      <div class="stats" id="stats-row">
+        <div class="stat"><div class="stat-num" id="s-total">—</div><div class="stat-label">Total Agents</div></div>
+        <div class="stat"><div class="stat-num" id="s-score">—</div><div class="stat-label">Avg Score</div></div>
+        <div class="stat"><div class="stat-num" id="s-downloads">—</div><div class="stat-label">Downloads</div></div>
+        <div class="stat"><div class="stat-num" id="s-stars">—</div><div class="stat-label">Stars</div></div>
+      </div>
+      <div class="search-row">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input class="search-input" id="search-input" type="text" placeholder="Search agents..." oninput="filterAgents()"/>
+        </div>
+        <select id="filter-status" onchange="filterAgents()">
+          <option value="">All status</option>
+          <option>alpha</option><option>beta</option>
+          <option>rc</option><option>stable</option><option>deprecated</option>
+        </select>
+        <select id="filter-grade" onchange="filterAgents()">
+          <option value="">All grades</option>
+          <option>A+</option><option>A</option><option>B</option>
+          <option>C</option><option>D</option><option>F</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Agent</th><th>Grade</th><th>Status</th><th>Score</th><th>Technologies</th>
+            </tr>
+          </thead>
+          <tbody id="agents-tbody">
+            <tr><td colspan="5" class="empty">Loading agents...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── RUN PAGE ── -->
+    <div class="page" id="page-run">
+      <div class="page-header">
+        <div class="page-title">Run Agent</div>
+        <div class="page-sub">Invoke an agent against your task</div>
+      </div>
+
+      <!-- Agent banner: shows which agent is loaded + clears conversation on change -->
+      <div class="agent-banner" id="agent-banner">
+        <span>Running: <strong id="banner-name">—</strong></span>
+        <button class="btn-secondary" style="margin:0;padding:5px 12px;font-size:12px" onclick="clearConversation()">Clear conversation</button>
+      </div>
+
+      <div class="card" style="padding: 24px;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Agent ID</label>
+            <input type="text" id="run-agent-id" placeholder="org.sel.0a8f554f.v1" oninput="onAgentIdChange(this.value)"/>
+          </div>
+          <div class="form-group">
+            <label>Mode</label>
+            <select id="run-mode" style="padding:10px 14px">
+              <option value="full">Full — analyse then generate</option>
+              <option value="analysis">Analysis — recommendations only</option>
+              <option value="generation">Generation — produce artifacts</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Message</label>
+            <textarea id="run-message" rows="4" placeholder="What do you want the agent to do?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Execute Code</label>
+            <div class="toggle-row">
+              <button class="toggle" id="exec-toggle" onclick="this.classList.toggle('on')"></button>
+              <span class="toggle-label">Run code in Docker sandbox</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Max Retries</label>
+            <input type="text" id="run-retries" value="2" style="width:80px"/>
+          </div>
+        </div>
+        <button class="btn-primary" id="run-btn" onclick="runAgent()">Run Agent</button>
+      </div>
+
+      <!-- Conversation history display -->
+      <div id="conv-history-wrap"></div>
+
+      <!-- Latest response -->
+      <div id="run-response"></div>
+    </div>
+
+    <!-- ── STATS PAGE ── -->
+    <div class="page" id="page-stats">
+      <div class="page-header">
+        <div class="page-title">Registry Stats</div>
+        <div class="page-sub">Aggregated metrics across all agents</div>
+      </div>
+      <div class="card" style="padding: 24px;" id="stats-detail">
+        <div class="empty">Loading stats...</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Agent detail modal -->
+<div class="overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-name">—</div>
+        <div style="font-size:13px;color:var(--ink2);margin-top:4px" id="modal-spec">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────────────────────
+(function() {
+  const saved = localStorage.getItem('theme') ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+
+function toggleTheme() {
+  const html   = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  document.getElementById('theme-icon').textContent  = isDark ? '🌙' : '☀️';
+  document.getElementById('theme-label').textContent = isDark ? 'Dark' : 'Light';
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.getElementById('theme-icon').textContent  = isDark ? '☀️' : '🌙';
+  document.getElementById('theme-label').textContent = isDark ? 'Light' : 'Dark';
+});
+
+// ── API helpers ───────────────────────────────────────────────────────────
+async function apiFetch(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? res.statusText);
+  }
+  return res.json();
+}
+async function fetchAgents() {
+  const data = await apiFetch('/api/agents?page_size=200');
+  return data.agents;
+}
+async function fetchStats() {
+  return apiFetch('/api/stats');
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let allAgents    = [];
+// Per-agent conversation map: agentId → conversation array
+// This is the key fix: each agent has its OWN conversation history.
+const convMap    = {};
+let activeAgentId = '';
+
+function getConversation(agentId) {
+  if (!convMap[agentId]) convMap[agentId] = [];
+  return convMap[agentId];
+}
+
+function clearConversation() {
+  if (!activeAgentId) return;
+  convMap[activeAgentId] = [];
+  document.getElementById('conv-history-wrap').innerHTML = '';
+  document.getElementById('run-response').innerHTML = '';
+}
+
+// Called whenever the agent ID input changes — resets active agent and
+// shows the correct existing conversation for that agent (if any).
+function onAgentIdChange(id) {
+  const trimmed = id.trim();
+  if (trimmed === activeAgentId) return;
+  activeAgentId = trimmed;
+
+  // Update banner
+  const agent = allAgents.find(a => a.id === trimmed);
+  const banner = document.getElementById('agent-banner');
+  if (agent) {
+    document.getElementById('banner-name').textContent = agent.name;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+
+  // Restore existing conversation for this agent (or clear if new)
+  document.getElementById('run-response').innerHTML = '';
+  renderConvHistory(trimmed);
+}
+
+// ── Connection status ─────────────────────────────────────────────────────
+function setConnectionStatus(ok, msg) {
+  const dot  = document.querySelector('.status-dot');
+  const text = document.getElementById('status-text');
+  if (!dot || !text) return;
+  dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+  dot.style.animation  = ok ? '' : 'none';
+  text.textContent = msg;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.onload = () => {
+  loadCatalog();
+  loadStats();
+};
+
+async function loadCatalog() {
+  try {
+    allAgents = await fetchAgents();
+    const s   = await fetchStats();
+    document.getElementById('s-total').textContent     = s.total;
+    document.getElementById('s-score').textContent     = s.avg_score;
+    document.getElementById('s-downloads').textContent = s.total_downloads.toLocaleString();
+    document.getElementById('s-stars').textContent     = s.total_stars.toLocaleString();
+    setConnectionStatus(true, 'Server connected');
+    renderTable(allAgents);
+  } catch (err) {
+    setConnectionStatus(false, 'Server unreachable');
+    document.getElementById('agents-tbody').innerHTML =
+      `<tr><td colspan="5" class="empty" style="color:var(--red)">⚠ Could not reach server: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadStats() {
+  let s;
+  try { s = await fetchStats(); } catch { return; }
+  const el = document.getElementById('stats-detail');
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <div style="font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">By Specialization</div>
+        ${Object.entries(s.by_specialization).map(([k,v])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px">
+            <span style="color:var(--ink2)">${escHtml(k)}</span>
+            <span class="badge badge-blue">${v}</span>
+          </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Top Technologies</div>
+        ${Object.entries(s.top_technologies).map(([k,v])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px">
+            <span style="color:var(--ink2)">${escHtml(k)}</span>
+            <span class="badge badge-gray">${v} agents</span>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div style="margin-top:24px">
+      <div style="font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">By Grade</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${Object.entries(s.by_grade).map(([k,v])=>`
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 20px;text-align:center">
+            <div style="font-family:'DM Serif Display',serif;font-size:22px">${escHtml(k)}</div>
+            <div style="font-size:12px;color:var(--ink3);margin-top:2px">${v} agent${v>1?'s':''}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ── Table render ──────────────────────────────────────────────────────────
+function renderTable(agents) {
+  const tbody = document.getElementById('agents-tbody');
+  if (!agents.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No agents found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = agents.map(a => `
+    <tr onclick="openModal('${escAttr(a.id)}')">
+      <td>
+        <div class="agent-name">${escHtml(a.name)}</div>
+        <div class="agent-spec">${escHtml(a.org)}</div>
+      </td>
+      <td><span class="badge ${gradeBadge(a.grade)}">${escHtml(a.grade)}</span></td>
+      <td><span class="badge ${statusBadge(a.status)}">${escHtml(a.status)}</span></td>
+      <td>
+        <div class="score-wrap">
+          <div class="score-bar"><div class="score-fill" style="width:${a.score}%"></div></div>
+          <div class="score-num">${a.score}</div>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--ink2)">${a.technologies.slice(0,3).map(escHtml).join(', ')}${a.technologies.length>3?' +'+(a.technologies.length-3):''}</td>
+    </tr>`).join('');
+}
+
+function gradeBadge(g) {
+  if(g==='A+'||g==='A') return 'badge-green';
+  if(g==='B') return 'badge-blue';
+  if(g==='C') return 'badge-amber';
+  return 'badge-red';
+}
+function statusBadge(s) {
+  if(s==='stable') return 'badge-green';
+  if(s==='beta'||s==='rc') return 'badge-blue';
+  if(s==='alpha') return 'badge-amber';
+  return 'badge-gray';
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────
+function filterAgents() {
+  const q      = document.getElementById('search-input').value.toLowerCase();
+  const status = document.getElementById('filter-status').value;
+  const grade  = document.getElementById('filter-grade').value;
+  const filtered = allAgents.filter(a =>
+    (!q      || a.name.toLowerCase().includes(q) || a.specialization.toLowerCase().includes(q) || a.technologies.some(t=>t.toLowerCase().includes(q))) &&
+    (!status || a.status === status) &&
+    (!grade  || a.grade  === grade)
+  );
+  renderTable(filtered);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const a = allAgents.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('modal-name').textContent = a.name;
+  document.getElementById('modal-spec').textContent = a.specialization;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="detail-row"><span class="detail-key">Agent ID</span><span class="detail-val" style="font-size:12px;font-family:monospace">${escHtml(a.id)}</span></div>
+    <div class="detail-row"><span class="detail-key">Organization</span><span class="detail-val">${escHtml(a.org)}</span></div>
+    <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="badge ${statusBadge(a.status)}">${escHtml(a.status)}</span></span></div>
+    <div class="detail-row"><span class="detail-key">Grade</span><span class="detail-val"><span class="badge ${gradeBadge(a.grade)}">${escHtml(a.grade)}</span></span></div>
+    <div class="detail-row"><span class="detail-key">Score</span><span class="detail-val">${a.score} / 100</span></div>
+    <div class="detail-row"><span class="detail-key">Stars</span><span class="detail-val">★ ${a.stars.toLocaleString()}</span></div>
+    <div class="detail-row"><span class="detail-key">Downloads</span><span class="detail-val">${a.downloads.toLocaleString()}</span></div>
+    <div style="margin-top:16px;font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px">Technologies</div>
+    <div class="tech-chips">${a.technologies.map(t=>`<span class="chip">${escHtml(t)}</span>`).join('')}</div>
+    <button class="btn-primary" style="margin-top:20px;width:100%" onclick="useAgent('${escAttr(a.id)}')">Run this agent ▷</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay'))
+    document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function useAgent(id) {
+  // Switch to run page and populate agent ID field
+  document.getElementById('run-agent-id').value = id;
+  onAgentIdChange(id);
+  closeModal();
+  // Manually trigger page switch without event
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-run').classList.add('active');
+  document.querySelectorAll('.nav-item')[1].classList.add('active');
+}
+
+// ── Markdown renderer ─────────────────────────────────────────────────────
+// Converts the agent's markdown response to clean HTML.
+// Handles: headings, bold, italic, code blocks, inline code,
+//          ordered/unordered lists (nested), horizontal rules,
+//          blockquotes, and basic tables.
+
+function renderMarkdown(md) {
+  if (!md) return '';
+
+  // Step 1: Extract and protect code blocks (replace with placeholders)
+  const codeBlocks = [];
+  let s = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang: lang.trim(), code: code.trimEnd() });
+    return `\x00CODE${idx}\x00`;
+  });
+
+  // Step 2: Escape HTML in non-code text
+  s = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Step 3: Block-level transforms (line by line)
+  const lines = s.split('\n');
+  const out   = [];
+  let inUl = false, inOl = false, inBlockquote = false;
+
+  function closeOpenLists() {
+    if (inUl) { out.push('</ul>'); inUl = false; }
+    if (inOl) { out.push('</ol>'); inOl = false; }
+  }
+  function closeBlockquote() {
+    if (inBlockquote) { out.push('</blockquote>'); inBlockquote = false; }
+  }
+
+  // Table detection helper
+  function isTableRow(line) { return line.trim().startsWith('|') && line.trim().endsWith('|'); }
+  function isSeparatorRow(line) { return /^\|[\s\-:|]+\|$/.test(line.trim()); }
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // ── Code block placeholder ──
+    if (trimmed.startsWith('\x00CODE') && trimmed.endsWith('\x00')) {
+      closeOpenLists(); closeBlockquote();
+      const idx = parseInt(trimmed.slice(5, -1));
+      const cb  = codeBlocks[idx];
+      const langLabel = cb.lang ? `<span class="lang-label">${escHtml(cb.lang)}</span>` : '';
+      const codeHtml  = cb.code
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      out.push(`<pre>${langLabel}<code>${codeHtml}</code></pre>`);
+      i++; continue;
+    }
+
+    // ── Horizontal rule ──
+    if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
+      closeOpenLists(); closeBlockquote();
+      out.push('<hr>'); i++; continue;
+    }
+
+    // ── Headings ──
+    const h = trimmed.match(/^(#{1,4})\s+(.+)/);
+    if (h) {
+      closeOpenLists(); closeBlockquote();
+      const level = h[1].length;
+      out.push(`<h${level}>${inlineMarkdown(h[2])}</h${level}>`);
+      i++; continue;
+    }
+
+    // ── Blockquote ──
+    if (trimmed.startsWith('&gt; ') || trimmed === '&gt;') {
+      closeOpenLists();
+      if (!inBlockquote) { out.push('<blockquote>'); inBlockquote = true; }
+      out.push(`<p>${inlineMarkdown(trimmed.replace(/^&gt;\s?/, ''))}</p>`);
+      i++; continue;
+    } else if (inBlockquote) {
+      closeBlockquote();
+    }
+
+    // ── Table (look-ahead for header + separator) ──
+    if (isTableRow(trimmed) && i + 1 < lines.length && isSeparatorRow(lines[i+1].trim())) {
+      closeOpenLists();
+      const headers = trimmed.split('|').filter((_,j,a) => j>0 && j<a.length-1).map(h => h.trim());
+      out.push('<table><thead><tr>' + headers.map(h=>`<th>${inlineMarkdown(h)}</th>`).join('') + '</tr></thead><tbody>');
+      i += 2; // skip header + separator
+      while (i < lines.length && isTableRow(lines[i].trim())) {
+        const cells = lines[i].trim().split('|').filter((_,j,a) => j>0 && j<a.length-1).map(c=>c.trim());
+        out.push('<tr>' + cells.map(c=>`<td>${inlineMarkdown(c)}</td>`).join('') + '</tr>');
+        i++;
+      }
+      out.push('</tbody></table>');
+      continue;
+    }
+
+    // ── Unordered list ──
+    const ulMatch = line.match(/^(\s*)[*\-+]\s+(.+)/);
+    if (ulMatch) {
+      if (inOl) { out.push('</ol>'); inOl = false; }
+      if (!inUl) { out.push('<ul>'); inUl = true; }
+      out.push(`<li>${inlineMarkdown(ulMatch[2])}</li>`);
+      i++; continue;
+    }
+
+    // ── Ordered list ──
+    const olMatch = line.match(/^(\s*)\d+\.\s+(.+)/);
+    if (olMatch) {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (!inOl) { out.push('<ol>'); inOl = true; }
+      out.push(`<li>${inlineMarkdown(olMatch[2])}</li>`);
+      i++; continue;
+    }
+
+    // ── Empty line ──
+    if (trimmed === '') {
+      closeOpenLists(); closeBlockquote();
+      i++; continue;
+    }
+
+    // ── Normal paragraph ──
+    closeOpenLists(); closeBlockquote();
+    out.push(`<p>${inlineMarkdown(trimmed)}</p>`);
+    i++;
+  }
+
+  closeOpenLists();
+  closeBlockquote();
+
+  return out.join('\n');
+}
+
+// Inline markdown: bold, italic, inline code, strikethrough
+function inlineMarkdown(s) {
+  // Inline code first (protect from other transforms)
+  const inlineCodes = [];
+  s = s.replace(/`([^`]+)`/g, (_, c) => {
+    const idx = inlineCodes.length;
+    inlineCodes.push(c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+    return `\x01${idx}\x01`;
+  });
+
+  // Bold+italic (***text***)
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  // Bold (**text** or __text__)
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  // Italic (*text* or _text_)
+  s = s.replace(/\*([^\*]+?)\*/g, '<em>$1</em>');
+  s = s.replace(/_([^_]+?)_/g, '<em>$1</em>');
+  // Strikethrough
+  s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+  // Restore inline code
+  s = s.replace(/\x01(\d+)\x01/g, (_, i) => `<code>${inlineCodes[parseInt(i)]}</code>`);
+
+  return s;
+}
+
+// ── Run agent ─────────────────────────────────────────────────────────────
+async function runAgent() {
+  const agentId  = document.getElementById('run-agent-id').value.trim();
+  const message  = document.getElementById('run-message').value.trim();
+  const mode     = document.getElementById('run-mode').value;
+  const execCode = document.getElementById('exec-toggle').classList.contains('on');
+  const retries  = parseInt(document.getElementById('run-retries').value) || 2;
+
+  if (!agentId || !message) {
+    alert('Please fill in Agent ID and Message.');
+    return;
+  }
+
+  // Ensure active agent is tracked
+  if (agentId !== activeAgentId) onAgentIdChange(agentId);
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Running...';
+
+  const respEl = document.getElementById('run-response');
+  respEl.innerHTML = '';
+
+  // Get THIS agent's conversation (isolated per agent)
+  const conv = getConversation(agentId);
+
+  try {
+    const data = await apiFetch('/api/invoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: agentId, message, mode,
+        execute_code: execCode, max_retries: retries,
+        conversation: conv
+      })
+    });
+
+    // Save updated conversation back to this agent's slot
+    convMap[agentId] = data.conversation;
+
+    const agent = allAgents.find(a => a.id === agentId);
+    const execResult = data.execution_result;
+
+    // Strip the execution result block from response text if present
+    // (it's already appended by the server; we render it separately below)
+    let responseText = data.response;
+    const execMarkerIdx = responseText.lastIndexOf('\n\n---\n## ⚙️ Code Execution Result');
+    if (execMarkerIdx !== -1) responseText = responseText.slice(0, execMarkerIdx);
+
+    respEl.innerHTML = `
+      <div class="response-box">
+        <div class="response-header">
+          <span><strong>${escHtml(agent?.name ?? agentId)}</strong> · ${escHtml(mode)} mode</span>
+          <span style="color:var(--ink3)">${new Date().toLocaleTimeString()}</span>
+        </div>
+        <div class="response-body">${renderMarkdown(responseText)}</div>
+        ${execResult ? `
+        <div class="exec-result ${execResult.stderr || execResult.compile_err ? 'error' : ''}">
+          <strong>⚙ Docker Execution</strong> · ${escHtml(execResult.language)} · ${escHtml(execResult.status)} · ${execResult.time}s
+          ${execResult.compile_err ? `<pre class="err">${escHtml(execResult.compile_err)}</pre>` : ''}
+          ${execResult.stdout     ? `<pre>${escHtml(execResult.stdout)}</pre>` : ''}
+          ${execResult.stderr     ? `<pre class="err">${escHtml(execResult.stderr)}</pre>` : ''}
+        </div>` : ''}
+      </div>`;
+
+    // Re-render full conversation history above
+    renderConvHistory(agentId);
+
+    // Clear the message input for next turn
+    document.getElementById('run-message').value = '';
+
+  } catch(err) {
+    respEl.innerHTML = `<div class="response-box"><div class="response-body" style="color:var(--red)">Error: ${escHtml(err.message)}</div></div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = 'Run Agent';
+}
+
+// ── Render conversation history ───────────────────────────────────────────
+// Shows all prior turns (not the latest one — that's in run-response)
+function renderConvHistory(agentId) {
+  const wrap = document.getElementById('conv-history-wrap');
+  const conv = getConversation(agentId);
+
+  // conv includes the latest turn already after runAgent saves it;
+  // we show all BUT the very last assistant turn (shown in run-response)
+  const turnsToShow = conv.slice(0, -2); // hide the last user+assistant pair
+
+  if (turnsToShow.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const agent = allAgents.find(a => a.id === agentId);
+  const agentInitials = (agent?.name ?? agentId).slice(0, 2).toUpperCase();
+
+  const html = turnsToShow.map(turn => {
+    const isUser = turn.role === 'user';
+    const content = isUser
+      ? `<div class="conv-bubble">${escHtml(turn.content)}</div>`
+      : `<div class="conv-bubble">${renderMarkdown(turn.content)}</div>`;
+    return `
+      <div class="conv-turn ${isUser ? 'user' : 'agent'}">
+        <div class="conv-avatar">${isUser ? 'You' : agentInitials}</div>
+        ${content}
+      </div>`;
+  }).join('');
+
+  const turnCount = conv.length / 2;
+  wrap.innerHTML = `
+    <div class="conv-history">
+      <div class="conv-title">Conversation history · ${turnCount} turn${turnCount !== 1 ? 's' : ''} with this agent</div>
+      ${html}
+    </div>`;
+}
+
+// ── Page nav ──────────────────────────────────────────────────────────────
+function showPage(name, event) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (event) event.currentTarget.classList.add('active');
+}
+
+// ── Escape helpers ────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

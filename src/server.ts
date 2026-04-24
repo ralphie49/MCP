@@ -34,7 +34,7 @@ const AGENTS_DIR = process.env["AGENTS_DIR"] ?? path.join(__dirname, "../../Agen
 // ── Server ────────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "agent-registry", version: "1.0.0" },
+  { name: "agent-registry", version: "1.1.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -42,7 +42,7 @@ const server = new Server(
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
-    // ── Discovery tools (unchanged) ──────────────────────────────────────────
+    // ── Discovery tools ──────────────────────────────────────────────────────
     {
       name: "list_agents",
       description:
@@ -98,12 +98,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
 
-    // ── Execution tool (new) ─────────────────────────────────────────────────
+    // ── Execution tool ────────────────────────────────────────────────────────
     {
       name: "invoke_agent",
       description:
         "Run an agent against a user task. The agent's agent.md defines its persona, rules, " +
-        "and execution mode. Pass back the returned `conversation` array to continue a multi-turn session.",
+        "and execution mode. Pass back the returned `conversation` array to continue a multi-turn session. " +
+        "Set execute_code=true to automatically run any code the agent generates in a sandbox " +
+        "and let the agent self-correct on errors.",
       inputSchema: {
         type: "object",
         required: ["agent_id", "message"],
@@ -134,10 +136,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             enum: ["analysis", "generation", "full"],
             description:
-              "Override the execution mode from agent.md. " +
               "'analysis' = recommendations only, " +
               "'generation' = produce artifacts, " +
               "'full' = analyse then generate (default).",
+          },
+          execute_code: {
+            type: "boolean",
+            default: false,
+            description:
+              "If true, any code block in the agent response is automatically executed " +
+              "in a Judge0 sandbox. Real stdout/stderr is returned and fed back to the " +
+              "agent so it can self-correct errors. Supports Python, Java, JavaScript, " +
+              "TypeScript, Go, Rust, C, C++, Bash, SQL.",
+          },
+          max_retries: {
+            type: "number",
+            default: 2,
+            description:
+              "How many times the agent may attempt to fix its own code after errors. " +
+              "Only used when execute_code is true. Default: 2.",
           },
         },
       },
@@ -180,18 +197,13 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         break;
       }
 
-      // ── NEW ────────────────────────────────────────────────────────────────
       case "invoke_agent": {
         const input = args as unknown as InvokeAgentInput;
-
-        // Look up the agent
         const agent = getAgent(agents, input.agent_id);
         if (!agent) {
           result = { error: `Agent not found: ${input.agent_id}` };
           break;
         }
-
-        // Run it — this calls the Anthropic API
         result = await invokeAgent(agent, input);
         break;
       }
