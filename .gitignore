@@ -8,6 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+env/
+
+# Node
 node_modules/
 
-env/
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*
