@@ -11,6 +11,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { invokeAgent } from "./executor.js";
+import { checkAgentHealth, checkRegistryHealth } from "./health.js";
+import { computeMcpProfile, computeMcpProfiles } from "./mcp-mapper.js";
 import {
   getAgent,
   getFilterOptions,
@@ -20,7 +22,10 @@ import {
   matchAgentsByCapability,
 } from "./registry.js";
 import type {
+  GetAgentHealthInput,
   GetAgentInput,
+  GetMcpProfileInput,
+  GetMcpProfilesInput,
   InvokeAgentInput,
   ListAgentsInput,
   MatchAgentsInput,
@@ -34,7 +39,7 @@ const AGENTS_DIR = process.env["AGENTS_DIR"] ?? path.join(__dirname, "../../Agen
 // ── Server ────────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "agent-registry", version: "1.1.0" },
+  { name: "agent-registry", version: "1.2.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -98,6 +103,72 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
 
+    // ── MCP Capability mapping tools ─────────────────────────────────────────
+    {
+      name: "get_agent_mcp_profile",
+      description:
+        "Get the MCP capability profile for a single agent. " +
+        "Returns the list of MCP tools this agent can serve (e.g. run_code, write_file, query_db), " +
+        "inferred dynamically from its tasks, technologies, and domains. " +
+        "Use this to understand what MCP server capabilities an agent maps to before integrating it.",
+      inputSchema: {
+        type: "object",
+        required: ["agent_id"],
+        properties: {
+          agent_id: { type: "string", description: "Agent folder ID" },
+        },
+      },
+    },
+    {
+      name: "get_all_mcp_profiles",
+      description:
+        "Get MCP capability profiles for all agents (or a filtered subset). " +
+        "Useful for building a capability matrix — which agents cover which MCP tools.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          specialization: { type: "string", description: "Filter by agent specialization" },
+          technology:     { type: "string", description: "Filter by agent technology" },
+          capability:     { type: "string", description: "Filter to agents whose MCP profile includes this tool name (e.g. 'run_code')" },
+        },
+      },
+    },
+
+    // ── Health check tools ────────────────────────────────────────────────────
+    {
+      name: "get_agent_health",
+      description:
+        "Run a health check on a single agent. " +
+        "Validates completeness (required fields, tasks, technologies), " +
+        "quality (score, grade), and lifecycle status. " +
+        "Returns healthy / degraded / unhealthy with per-check details.",
+      inputSchema: {
+        type: "object",
+        required: ["agent_id"],
+        properties: {
+          agent_id: { type: "string", description: "Agent folder ID" },
+        },
+      },
+    },
+    {
+      name: "get_registry_health",
+      description:
+        "Run health checks across the entire registry. " +
+        "Returns a summary (healthy/degraded/unhealthy counts) plus per-agent reports. " +
+        "Use this to identify agents that need attention before MCP server registration.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status_filter: {
+            type: "string",
+            enum: ["healthy", "degraded", "unhealthy", "all"],
+            default: "all",
+            description: "Return only agents matching this health status",
+          },
+        },
+      },
+    },
+
     // ── Execution tool ────────────────────────────────────────────────────────
     {
       name: "invoke_agent",
@@ -145,16 +216,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             default: false,
             description:
               "If true, any code block in the agent response is automatically executed " +
-              "in a Judge0 sandbox. Real stdout/stderr is returned and fed back to the " +
-              "agent so it can self-correct errors. Supports Python, Java, JavaScript, " +
-              "TypeScript, Go, Rust, C, C++, Bash, SQL.",
+              "in a local Docker sandbox.",
           },
           max_retries: {
             type: "number",
             default: 2,
-            description:
-              "How many times the agent may attempt to fix its own code after errors. " +
-              "Only used when execute_code is true. Default: 2.",
+            description: "How many times the agent may attempt to fix its own code after errors.",
           },
         },
       },
@@ -196,6 +263,71 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         result = matchAgentsByCapability(agents, input.capability, input.max_results);
         break;
       }
+
+      // ── MCP capability mapping ──────────────────────────────────────────────
+
+      case "get_agent_mcp_profile": {
+        const input = args as unknown as GetMcpProfileInput;
+        const agent = getAgent(agents, input.agent_id);
+        if (!agent) {
+          result = { error: `Agent not found: ${input.agent_id}` };
+          break;
+        }
+        result = computeMcpProfile(agent);
+        break;
+      }
+
+      case "get_all_mcp_profiles": {
+        const input  = (args ?? {}) as GetMcpProfilesInput;
+        let filtered = [...agents];
+
+        if (input.specialization) {
+          const s = input.specialization.toLowerCase();
+          filtered = filtered.filter(a => a.specialization.toLowerCase().includes(s));
+        }
+        if (input.technology) {
+          const t = input.technology.toLowerCase();
+          filtered = filtered.filter(a =>
+            a.technologies.some(tech => tech.toLowerCase().includes(t))
+          );
+        }
+
+        let profiles = computeMcpProfiles(filtered);
+
+        if (input.capability) {
+          const cap = input.capability.toLowerCase();
+          profiles = profiles.filter(p =>
+            p.capabilities.some(c => c.tool.toLowerCase().includes(cap))
+          );
+        }
+
+        result = { profiles, total: profiles.length };
+        break;
+      }
+
+      // ── Health checks ───────────────────────────────────────────────────────
+
+      case "get_agent_health": {
+        const input = args as unknown as GetAgentHealthInput;
+        const agent = getAgent(agents, input.agent_id);
+        if (!agent) {
+          result = { error: `Agent not found: ${input.agent_id}` };
+          break;
+        }
+        result = checkAgentHealth(agent);
+        break;
+      }
+
+      case "get_registry_health": {
+        const input        = (args ?? {}) as { status_filter?: string };
+        const { reports, summary } = checkRegistryHealth(agents);
+        const filter       = input.status_filter ?? "all";
+        const filtered     = filter === "all" ? reports : reports.filter(r => r.status === filter);
+        result = { summary, reports: filtered };
+        break;
+      }
+
+      // ── Execution ───────────────────────────────────────────────────────────
 
       case "invoke_agent": {
         const input = args as unknown as InvokeAgentInput;

@@ -381,6 +381,81 @@
   .page { display: none; }
   .page.active { display: block; }
 
+  /* ── MCP Profile panel ── */
+  .mcp-section {
+    margin-top: 20px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .mcp-section-title {
+    font-size: 11px; font-weight: 500; color: var(--ink3);
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mcp-loading {
+    font-size: 13px; color: var(--ink3); padding: 8px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mcp-spinner {
+    width: 12px; height: 12px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  .mcp-caps-grid {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+  }
+  .mcp-cap {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px;
+    color: var(--ink2); font-family: 'SF Mono','Fira Code',monospace;
+    cursor: default;
+  }
+  .mcp-cap.high   { border-color: var(--accent); color: var(--accent); background: var(--accent2); }
+  .mcp-cap.medium { border-color: var(--border); color: var(--ink2); }
+  .mcp-cap.low    { border-color: var(--border); color: var(--ink3); }
+  .mcp-cap-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .mcp-cap.high   .mcp-cap-dot { background: var(--accent); }
+  .mcp-cap.medium .mcp-cap-dot { background: var(--ink3); }
+  .mcp-cap.low    .mcp-cap-dot { background: var(--border); }
+  .mcp-server-hint {
+    font-size: 11px; color: var(--ink3); margin-top: 4px;
+    font-family: 'SF Mono','Fira Code',monospace;
+  }
+
+  /* ── Health panel ── */
+  .health-bar-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .health-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  }
+  .health-badge.healthy   { background: var(--green-bg);  color: var(--green); }
+  .health-badge.degraded  { background: var(--amber-bg);  color: var(--amber); }
+  .health-badge.unhealthy { background: var(--red-bg);    color: var(--red); }
+  .health-score-bar { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .health-score-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .health-score-fill.healthy   { background: var(--green); }
+  .health-score-fill.degraded  { background: var(--amber); }
+  .health-score-fill.unhealthy { background: var(--red); }
+  .health-checks { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+  .health-check {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; color: var(--ink2); line-height: 1.4;
+  }
+  .health-check-icon { font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+  .health-warnings {
+    margin-top: 8px; padding: 8px 12px;
+    background: var(--amber-bg); border-radius: 6px;
+    font-size: 12px; color: var(--amber);
+  }
+  .health-warnings ul { margin: 4px 0 0 14px; }
+  .health-warnings li { margin-bottom: 2px; }
+
+  /* ── Modal wider for new content ── */
+  .modal { max-width: 620px; }
+
   /* ── Agent info banner (shown in run page when agent is selected) ── */
   .agent-banner {
     background: var(--accent2); border: 1px solid var(--accent);
@@ -424,6 +499,9 @@
       </button>
       <button class="nav-item" onclick="showPage('stats', event)">
         <span class="nav-icon">◉</span> Stats
+      </button>
+      <button class="nav-item" onclick="showPage('health', event); loadHealthPage()">
+        <span class="nav-icon">◎</span> Health
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -538,6 +616,32 @@
       <div class="card" style="padding: 24px;" id="stats-detail">
         <div class="empty">Loading stats...</div>
       </div>
+    </div>
+
+    <!-- ── HEALTH PAGE ── -->
+    <div class="page" id="page-health">
+      <div class="page-header">
+        <div class="page-title">Registry Health</div>
+        <div class="page-sub">Completeness and quality checks across all agents</div>
+      </div>
+      <!-- Summary strip -->
+      <div class="stats" id="health-stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        <div class="stat"><div class="stat-num" id="h-healthy" style="color:var(--green)">—</div><div class="stat-label">Healthy</div></div>
+        <div class="stat"><div class="stat-num" id="h-degraded" style="color:var(--amber)">—</div><div class="stat-label">Degraded</div></div>
+        <div class="stat"><div class="stat-num" id="h-unhealthy" style="color:var(--red)">—</div><div class="stat-label">Unhealthy</div></div>
+        <div class="stat"><div class="stat-num" id="h-pct">—</div><div class="stat-label">Health %</div></div>
+      </div>
+      <!-- Filter -->
+      <div class="search-row" style="margin-bottom:16px">
+        <select id="health-filter" onchange="renderHealthPage()" style="width:180px">
+          <option value="all">All agents</option>
+          <option value="healthy">Healthy only</option>
+          <option value="degraded">Degraded only</option>
+          <option value="unhealthy">Unhealthy only</option>
+        </select>
+        <span style="font-size:13px;color:var(--ink3);margin-left:4px" id="health-count"></span>
+      </div>
+      <div id="health-list"><div class="empty">Loading health data…</div></div>
     </div>
 
   </main>
@@ -760,20 +864,126 @@ function filterAgents() {
 function openModal(id) {
   const a = allAgents.find(x => x.id === id);
   if (!a) return;
+
   document.getElementById('modal-name').textContent = a.name;
   document.getElementById('modal-spec').textContent = a.specialization;
   document.getElementById('modal-body').innerHTML = `
     <div class="detail-row"><span class="detail-key">Agent ID</span><span class="detail-val" style="font-size:12px;font-family:monospace">${escHtml(a.id)}</span></div>
     <div class="detail-row"><span class="detail-key">Organization</span><span class="detail-val">${escHtml(a.org)}</span></div>
+    <div class="detail-row"><span class="detail-key">Division</span><span class="detail-val">${escHtml(a.division || '—')}</span></div>
+    <div class="detail-row"><span class="detail-key">Creator</span><span class="detail-val">${escHtml(a.creator || '—')}</span></div>
     <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="badge ${statusBadge(a.status)}">${escHtml(a.status)}</span></span></div>
     <div class="detail-row"><span class="detail-key">Grade</span><span class="detail-val"><span class="badge ${gradeBadge(a.grade)}">${escHtml(a.grade)}</span></span></div>
-    <div class="detail-row"><span class="detail-key">Score</span><span class="detail-val">${a.score} / 100</span></div>
+    <div class="detail-row"><span class="detail-key">JAST Score</span><span class="detail-val">${a.score} / 100</span></div>
     <div class="detail-row"><span class="detail-key">Stars</span><span class="detail-val">★ ${a.stars.toLocaleString()}</span></div>
     <div class="detail-row"><span class="detail-key">Downloads</span><span class="detail-val">${a.downloads.toLocaleString()}</span></div>
+    <div class="detail-row"><span class="detail-key">Version</span><span class="detail-val">${escHtml(a.version || '—')}</span></div>
+
     <div style="margin-top:16px;font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px">Technologies</div>
-    <div class="tech-chips">${a.technologies.map(t=>`<span class="chip">${escHtml(t)}</span>`).join('')}</div>
+    <div class="tech-chips">${a.technologies.map(t=>`<span class="chip">${escHtml(t)}</span>`).join('') || '<span style="color:var(--ink3);font-size:13px">None declared</span>'}</div>
+
+    ${a.tasks && a.tasks.length ? `
+    <div style="margin-top:16px;font-size:12px;font-weight:500;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px">Tasks</div>
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+      ${a.tasks.map(t=>`
+        <div style="font-size:13px;padding:8px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">
+          <span style="font-weight:500;color:var(--ink)">${escHtml(t.name)}</span>
+          <span style="margin-left:8px;font-size:11px;color:var(--ink3)">${t.async ? '⟳ async' : '→ sync'}</span>
+          <div style="color:var(--ink2);margin-top:2px;font-size:12px">${escHtml(t.description)}</div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    <!-- MCP Capabilities — loaded async -->
+    <div class="mcp-section">
+      <div class="mcp-section-title">⬡ MCP Capabilities</div>
+      <div id="mcp-profile-slot">
+        <div class="mcp-loading"><div class="mcp-spinner"></div>Computing capability profile…</div>
+      </div>
+    </div>
+
+    <!-- Health Check — loaded async -->
+    <div class="mcp-section">
+      <div class="mcp-section-title">◎ Registry Health</div>
+      <div id="health-slot">
+        <div class="mcp-loading"><div class="mcp-spinner"></div>Running health checks…</div>
+      </div>
+    </div>
+
     <button class="btn-primary" style="margin-top:20px;width:100%" onclick="useAgent('${escAttr(a.id)}')">Run this agent ▷</button>`;
+
   document.getElementById('modal-overlay').classList.add('open');
+
+  // Fetch MCP profile and health in parallel
+  Promise.all([
+    apiFetch(`/api/agents/${encodeURIComponent(a.id)}/mcp-profile`),
+    apiFetch(`/api/agents/${encodeURIComponent(a.id)}/health`),
+  ]).then(([profile, health]) => {
+    renderMcpProfile(profile);
+    renderHealth(health);
+  }).catch(err => {
+    const msg = `<div style="font-size:12px;color:var(--red)">Failed to load: ${escHtml(err.message)}</div>`;
+    const ps  = document.getElementById('mcp-profile-slot');
+    const hs  = document.getElementById('health-slot');
+    if (ps) ps.innerHTML = msg;
+    if (hs) hs.innerHTML = msg;
+  });
+}
+
+function renderMcpProfile(profile) {
+  const slot = document.getElementById('mcp-profile-slot');
+  if (!slot) return;
+
+  if (!profile.capabilities || profile.capabilities.length === 0) {
+    slot.innerHTML = `<div style="font-size:13px;color:var(--ink3)">No MCP capabilities inferred — add tasks or technologies to agent.md</div>`;
+    return;
+  }
+
+  const highCaps   = profile.capabilities.filter(c => c.confidence === 'high');
+  const medLowCaps = profile.capabilities.filter(c => c.confidence !== 'high');
+
+  const capHtml = (caps) => caps.map(c => `
+    <div class="mcp-cap ${escHtml(c.confidence)}" title="${escHtml(c.description)} [${escHtml(c.category)}]">
+      <div class="mcp-cap-dot"></div>${escHtml(c.tool)}
+    </div>`).join('');
+
+  slot.innerHTML = `
+    ${highCaps.length ? `
+      <div style="font-size:11px;color:var(--ink3);margin-bottom:5px;font-weight:500">HIGH CONFIDENCE</div>
+      <div class="mcp-caps-grid">${capHtml(highCaps)}</div>` : ''}
+    ${medLowCaps.length ? `
+      <div style="font-size:11px;color:var(--ink3);margin:8px 0 5px;font-weight:500">MEDIUM / LOW</div>
+      <div class="mcp-caps-grid">${capHtml(medLowCaps)}</div>` : ''}
+    <div class="mcp-server-hint">Suggested server type: ${escHtml(profile.mcp_server_hint)}</div>`;
+}
+
+function renderHealth(health) {
+  const slot = document.getElementById('health-slot');
+  if (!slot) return;
+
+  const statusIcon = health.status === 'healthy' ? '✓' : health.status === 'degraded' ? '⚠' : '✕';
+
+  const checksHtml = health.checks.map(c => `
+    <div class="health-check">
+      <span class="health-check-icon">${c.passed ? '✓' : '✕'}</span>
+      <span style="color:${c.passed ? 'var(--ink2)' : 'var(--red)'}">${escHtml(c.message)}</span>
+    </div>`).join('');
+
+  const warningsHtml = health.warnings && health.warnings.length ? `
+    <div class="health-warnings">
+      <strong>⚠ Warnings</strong>
+      <ul>${health.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul>
+    </div>` : '';
+
+  slot.innerHTML = `
+    <div class="health-bar-row">
+      <span class="health-badge ${health.status}">${statusIcon} ${health.status}</span>
+      <div class="health-score-bar">
+        <div class="health-score-fill ${health.status}" style="width:${health.score}%"></div>
+      </div>
+      <span style="font-size:12px;color:var(--ink3);min-width:36px;text-align:right">${health.score}%</span>
+    </div>
+    <div class="health-checks">${checksHtml}</div>
+    ${warningsHtml}`;
 }
 
 function closeModal(e) {
@@ -1073,6 +1283,75 @@ function showPage(name, event) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   if (event) event.currentTarget.classList.add('active');
+}
+
+// ── Health page ───────────────────────────────────────────────────────────
+let healthData = null;
+
+async function loadHealthPage() {
+  if (healthData) { renderHealthPage(); return; }
+  document.getElementById('health-list').innerHTML = '<div class="empty">Loading health data…</div>';
+  try {
+    healthData = await apiFetch('/api/health');
+    const s = healthData.summary;
+    document.getElementById('h-healthy').textContent   = s.healthy;
+    document.getElementById('h-degraded').textContent  = s.degraded;
+    document.getElementById('h-unhealthy').textContent = s.unhealthy;
+    document.getElementById('h-pct').textContent       = s.health_pct + '%';
+    renderHealthPage();
+  } catch(err) {
+    document.getElementById('health-list').innerHTML =
+      `<div class="empty" style="color:var(--red)">Failed to load: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderHealthPage() {
+  if (!healthData) return;
+  const filter   = document.getElementById('health-filter').value;
+  const reports  = filter === 'all'
+    ? healthData.reports
+    : healthData.reports.filter(r => r.status === filter);
+
+  document.getElementById('health-count').textContent = `${reports.length} agent${reports.length !== 1 ? 's' : ''}`;
+
+  if (!reports.length) {
+    document.getElementById('health-list').innerHTML = '<div class="empty">No agents match this filter</div>';
+    return;
+  }
+
+  document.getElementById('health-list').innerHTML = reports.map(r => {
+    const statusIcon = r.status === 'healthy' ? '✓' : r.status === 'degraded' ? '⚠' : '✕';
+    const failedChecks = r.checks.filter(c => !c.passed);
+
+    return `
+    <div class="card" style="padding:16px 20px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:${failedChecks.length || r.warnings.length ? '12px' : '0'}">
+        <span class="health-badge ${r.status}" style="flex-shrink:0">${statusIcon} ${r.status}</span>
+        <div style="flex:1">
+          <div style="font-weight:500;font-size:14px;color:var(--ink)">${escHtml(r.agent_name)}</div>
+          <div style="font-size:11px;color:var(--ink3);font-family:monospace;margin-top:1px">${escHtml(r.agent_id)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="health-score-bar" style="width:80px">
+            <div class="health-score-fill ${r.status}" style="width:${r.score}%"></div>
+          </div>
+          <span style="font-size:12px;color:var(--ink3);min-width:32px;text-align:right">${r.score}%</span>
+        </div>
+      </div>
+      ${failedChecks.length ? `
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${failedChecks.map(c => `
+            <div class="health-check">
+              <span class="health-check-icon" style="color:var(--red)">✕</span>
+              <span style="color:var(--red);font-size:12px">${escHtml(c.message)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      ${r.warnings && r.warnings.length ? `
+        <div style="margin-top:8px;font-size:12px;color:var(--amber)">
+          ⚠ ${r.warnings.map(escHtml).join(' · ')}
+        </div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 // ── Escape helpers ────────────────────────────────────────────────────────

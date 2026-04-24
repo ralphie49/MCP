@@ -1,21 +1,19 @@
 // src/web.ts
-// Express HTTP server that serves index.html and exposes REST endpoints
-// so the frontend can talk directly to the registry + executor logic.
+// Express HTTP server — serves index.html and REST endpoints.
 //
-// Start with:  npm run web
-// Then open:   http://localhost:3000
-//
-// Env vars:
-//   PORT        – HTTP port (default 3000)
-//   AGENTS_DIR  – path to your Agents folder (default ../../Agents relative to src/)
-//   NVIDIA_API_KEY – required for invoke_agent
-//   JUDGE0_API_KEY – optional, raises Judge0 rate limit
+// New endpoints added:
+//   GET  /api/agents/:id/mcp-profile   — MCP capability profile for one agent
+//   GET  /api/mcp-profiles             — profiles for all (or filtered) agents
+//   GET  /api/agents/:id/health        — health check for one agent
+//   GET  /api/health                   — registry-wide health summary + reports
 
 import express, { type Request, type Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 
 import { invokeAgent } from "./executor.js";
+import { checkAgentHealth, checkRegistryHealth } from "./health.js";
+import { computeMcpProfile, computeMcpProfiles } from "./mcp-mapper.js";
 import {
   getAgent,
   getFilterOptions,
@@ -41,22 +39,15 @@ const PORT       = parseInt(process.env["PORT"] ?? "3000", 10);
 const app = express();
 app.use(express.json());
 
-// Serve index.html from the project root (one level up from src/)
 const PUBLIC_DIR = path.join(__dirname, "..");
 app.use(express.static(PUBLIC_DIR));
-
-// ── Helper ────────────────────────────────────────────────────────────────────
 
 function getAgents() {
   return loadAgents(AGENTS_DIR);
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Original routes ───────────────────────────────────────────────────────────
 
-// GET /api/agents  — list / filter agents
-// Query params mirror ListAgentsInput fields:
-//   specialization, technology, org, status, grade, search,
-//   sort_by, sort_order, page, page_size
 app.get("/api/agents", (req: Request, res: Response) => {
   try {
     const input: ListAgentsInput = {
@@ -77,7 +68,6 @@ app.get("/api/agents", (req: Request, res: Response) => {
   }
 });
 
-// GET /api/agents/:id  — single agent details
 app.get("/api/agents/:id", (req: Request, res: Response) => {
   try {
     const agent = getAgent(getAgents(), req.params["id"]!);
@@ -88,7 +78,6 @@ app.get("/api/agents/:id", (req: Request, res: Response) => {
   }
 });
 
-// GET /api/stats  — registry-wide aggregate stats
 app.get("/api/stats", (_req: Request, res: Response) => {
   try {
     res.json(getRegistryStats(getAgents()));
@@ -97,7 +86,6 @@ app.get("/api/stats", (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/filters  — valid filter dropdown values
 app.get("/api/filters", (_req: Request, res: Response) => {
   try {
     res.json(getFilterOptions(getAgents()));
@@ -106,8 +94,6 @@ app.get("/api/filters", (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/match  — keyword capability match
-// Body: { capability: string, max_results?: number }
 app.post("/api/match", (req: Request, res: Response) => {
   try {
     const { capability, max_results } = req.body as MatchAgentsInput;
@@ -118,8 +104,6 @@ app.post("/api/match", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/invoke  — run an agent
-// Body mirrors InvokeAgentInput (agent_id, message, conversation?, mode?, execute_code?, max_retries?)
 app.post("/api/invoke", async (req: Request, res: Response) => {
   try {
     const input = req.body as InvokeAgentInput;
@@ -136,6 +120,81 @@ app.post("/api/invoke", async (req: Request, res: Response) => {
   }
 });
 
+// ── MCP Capability mapping routes ─────────────────────────────────────────────
+
+// GET /api/agents/:id/mcp-profile
+// Returns the MCP capability profile for a single agent.
+// Example: GET /api/agents/org.sel.f07b4618.v1/mcp-profile
+app.get("/api/agents/:id/mcp-profile", (req: Request, res: Response) => {
+  try {
+    const agent = getAgent(getAgents(), req.params["id"]!);
+    if (!agent) return void res.status(404).json({ error: `Agent not found: ${req.params["id"]}` });
+    res.json(computeMcpProfile(agent));
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/mcp-profiles
+// Returns profiles for all agents, with optional filters:
+//   ?specialization=Code+Generation
+//   ?technology=Terraform
+//   ?capability=run_code          ← only agents whose profile includes this MCP tool
+app.get("/api/mcp-profiles", (req: Request, res: Response) => {
+  try {
+    let agents = getAgents();
+
+    const spec = req.query["specialization"] as string | undefined;
+    const tech = req.query["technology"]     as string | undefined;
+    const cap  = req.query["capability"]     as string | undefined;
+
+    if (spec) agents = agents.filter(a => a.specialization.toLowerCase().includes(spec.toLowerCase()));
+    if (tech) agents = agents.filter(a => a.technologies.some(t => t.toLowerCase().includes(tech.toLowerCase())));
+
+    let profiles = computeMcpProfiles(agents);
+
+    if (cap) {
+      profiles = profiles.filter(p =>
+        p.capabilities.some(c => c.tool.toLowerCase().includes(cap.toLowerCase()))
+      );
+    }
+
+    res.json({ profiles, total: profiles.length });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Health check routes ───────────────────────────────────────────────────────
+
+// GET /api/agents/:id/health
+// Health check for a single agent.
+// Example: GET /api/agents/org.sel.f07b4618.v1/health
+app.get("/api/agents/:id/health", (req: Request, res: Response) => {
+  try {
+    const agent = getAgent(getAgents(), req.params["id"]!);
+    if (!agent) return void res.status(404).json({ error: `Agent not found: ${req.params["id"]}` });
+    res.json(checkAgentHealth(agent));
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/health
+// Registry-wide health check.
+// Optional filter: ?status=degraded  (healthy | degraded | unhealthy | all)
+app.get("/api/health", (_req: Request, res: Response) => {
+  try {
+    const agents               = getAgents();
+    const { reports, summary } = checkRegistryHealth(agents);
+    const filter               = (_req.query["status"] as string) ?? "all";
+    const filtered             = filter === "all" ? reports : reports.filter(r => r.status === filter);
+    res.json({ summary, reports: filtered });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
@@ -143,4 +202,9 @@ app.listen(PORT, () => {
   console.log(`   → http://localhost:${PORT}`);
   console.log(`   → Agents dir: ${AGENTS_DIR}`);
   console.log(`   → API base:   http://localhost:${PORT}/api\n`);
+  console.log(`   New endpoints:`);
+  console.log(`   → GET  /api/agents/:id/mcp-profile`);
+  console.log(`   → GET  /api/mcp-profiles`);
+  console.log(`   → GET  /api/agents/:id/health`);
+  console.log(`   → GET  /api/health\n`);
 });

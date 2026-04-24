@@ -77,13 +77,25 @@ const DOCKER_LANGS: Record<string, LangConfig> = {
   typescript: {
     image: "node:20-slim",
     ext:   "ts",
-    // npx tsx is available in node:20-slim after a first-run install
-    // We use a small wrapper so no global install is needed
-    cmd:   f => ["node", "--input-type=module", "--eval",
-      // Inline-transpile TS → JS via a regex strip of type annotations, good enough for simple scripts.
-      // For real TS, agents should generate JS instead; this handles basic cases.
-      `import{readFileSync}from'fs';const c=readFileSync('${f}','utf8').replace(/:\\s*[\\w<>|&,\\[\\]]+/g,'').replace(/^\\s*export\\s+/gm,'');eval(c);`
-    ],
+    // Strategy:
+    //   1. Install tsx (fast TS runner, no separate tsc step needed) via npm.
+    //   2. Write a minimal tsconfig so imports work correctly.
+    //   3. Run the file with tsx.
+    //
+    // tsx handles: plain TS, ESM imports, type annotations, enums, generics.
+    // It does NOT handle multi-file framework projects (Angular, React apps).
+    // For those the agent should produce code only, not expect execution.
+    //
+    // The npm install is cached by Docker layer caching on repeat runs
+    // because we always install the same package version.
+    cmd: f => ["sh", "-c", [
+      // Install tsx once (takes ~3s on first run, skipped if already present)
+      "npm install -g tsx@4 --prefer-offline --silent 2>/dev/null || true",
+      // Write a permissive tsconfig so tsx doesn't complain about module settings
+      `echo '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler","esModuleInterop":true,"strict":false,"skipLibCheck":true}}' > /code/tsconfig.json`,
+      // Run the file
+      `tsx ${f}`,
+    ].join(" && ")],
   },
   java: {
     image: "eclipse-temurin:21-jdk-alpine",
@@ -154,7 +166,12 @@ function buildSystemPrompt(agent: Agent, mode: string, enableExecution: boolean)
 
   const executionNote = enableExecution
     ? "\n\nIMPORTANT: Your code will be automatically executed in a Docker sandbox. " +
-      "Write complete, runnable code only. Do not use placeholder values. " +
+      "Write complete, runnable, single-file code only. Do not use placeholder values. " +
+      "CRITICAL EXECUTION RULES: " +
+      "Single-file scripts only — Python, JS, TS, Go, Rust, Java, C, C++, Bash, SQL are supported. " +
+      "Do NOT attempt to execute multi-file framework projects (Angular, React, Vue, NestJS, etc). " +
+      "For framework code, generate the files and explain how to run them locally — do NOT wrap them in a single executable block. " +
+      "For TypeScript, write self-contained scripts with no framework dependencies. " +
       "If execution results are provided below, use them to fix any errors."
     : "";
 

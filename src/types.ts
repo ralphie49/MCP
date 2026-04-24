@@ -59,6 +59,66 @@ export interface MatchAgentsInput {
   max_results?: number;
 }
 
+// ── MCP Capability types ───────────────────────────────────────────────────────
+
+export interface McpCapability {
+  tool:        string;
+  description: string;
+  category:    string;
+  confidence:  "high" | "medium" | "low";
+}
+
+export interface AgentMcpProfile {
+  agent_id:        string;
+  agent_name:      string;
+  capabilities:    McpCapability[];
+  suggested_tools: string[];
+  mcp_server_hint: string;
+}
+
+export interface GetMcpProfileInput {
+  agent_id: string;
+}
+
+export interface GetMcpProfilesInput {
+  specialization?: string;
+  technology?:     string;
+  capability?:     string;   // filter profiles that include this MCP tool name
+}
+
+// ── Health check types ─────────────────────────────────────────────────────────
+
+export type HealthStatus = "healthy" | "degraded" | "unhealthy";
+
+export interface HealthCheck {
+  name:    string;
+  passed:  boolean;
+  message: string;
+}
+
+export interface AgentHealthReport {
+  agent_id:   string;
+  agent_name: string;
+  status:     HealthStatus;
+  score:      number;
+  checks:     HealthCheck[];
+  warnings:   string[];
+  checked_at: string;
+}
+
+export interface RegistryHealthSummary {
+  total:      number;
+  healthy:    number;
+  degraded:   number;
+  unhealthy:  number;
+  health_pct: number;
+  checked_at: string;
+}
+
+export interface GetAgentHealthInput {
+  agent_id: string;
+}
+
 // ── Execution types ────────────────────────────────────────────────────────────
 
 export interface ConversationMessage {
@@ -66,47 +126,23 @@ export interface ConversationMessage {
   content: string;
 }
 
-/** Result from running code in the Judge0 sandbox */
 export interface CodeExecutionResult {
   stdout:      string;
   stderr:      string;
   compile_err: string;
-  status:      string;   // e.g. "Accepted", "Runtime Error", "Compilation Error"
-  time:        string;   // seconds
-  memory:      string;   // KB
-  language:    string;   // e.g. "python", "java"
+  status:      string;
+  time:        string;
+  memory:      string;
+  language:    string;
 }
 
 export interface InvokeAgentInput {
-  /** Agent folder ID — same as used in get_agent */
-  agent_id:    string;
-  /** The user's task / prompt for this agent */
-  message:     string;
-  /**
-   * Optional prior conversation turns for multi-turn sessions.
-   * Pass the previous `conversation` array from the last response to continue.
-   */
+  agent_id:      string;
+  message:       string;
   conversation?: ConversationMessage[];
-  /**
-   * Override the execution mode defined in agent.md.
-   * "analysis"  → recommendations only
-   * "generation"→ generate artifacts
-   * "full"      → analyse then generate (default)
-   */
-  mode?: "analysis" | "generation" | "full";
-  /**
-   * If true, any code block in the agent's response will be automatically
-   * executed in the Judge0 sandbox. Errors are fed back to the agent
-   * so it can self-correct (up to max_retries times).
-   * Default: false
-   */
+  mode?:         "analysis" | "generation" | "full";
   execute_code?: boolean;
-  /**
-   * How many times the agent may attempt to fix its own code after errors.
-   * Only used when execute_code is true.
-   * Default: 2
-   */
-  max_retries?: number;
+  max_retries?:  number;
 }
 
 export interface InvokeAgentResult {
@@ -114,9 +150,7 @@ export interface InvokeAgentResult {
   agent_name:        string;
   mode:              string;
   response:          string;
-  /** Present only when execute_code was true and code was found in the response */
   execution_result?: CodeExecutionResult;
-  /** Full conversation so far — pass back as `conversation` for the next turn */
   conversation:      ConversationMessage[];
   usage?: {
     input_tokens:  number;
@@ -139,15 +173,15 @@ export interface ListAgentsResult {
 }
 
 export interface RegistryStats {
-  total:              number;
-  by_specialization:  Record<string, number>;
-  by_org:             Record<string, number>;
-  by_status:          Record<string, number>;
-  by_grade:           Record<string, number>;
-  top_technologies:   Record<string, number>;
-  avg_score:          number;
-  total_downloads:    number;
-  total_stars:        number;
+  total:             number;
+  by_specialization: Record<string, number>;
+  by_org:            Record<string, number>;
+  by_status:         Record<string, number>;
+  by_grade:          Record<string, number>;
+  top_technologies:  Record<string, number>;
+  avg_score:         number;
+  total_downloads:   number;
+  total_stars:       number;
 }
 
 export interface FilterOptions {
